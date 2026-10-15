@@ -106,16 +106,22 @@
         .filters-row { display: flex; flex-direction: column; gap: 10px; }
         
         .footer-signature { text-align: center; margin-top: 25px; font-size: 12px; color: var(--tab-text); border-top: 1px solid var(--border-color); padding-top: 15px; }
-        .print-header, .print-signature { display: none; }
+        .print-header { display: none; }
 
         @media print {
             body { background: white; padding: 0; color: black; }
             .container { box-shadow: none; padding: 0; max-width: 100%; }
             .top-bar, .alert-banner, .dashboard-grid, .progress-bar-container, .quick-filters, .tabs-header, .form-group, .btn-container, .backup-section, .search-section, .filter-section, .pdf-action-section, .action-btns, th:last-child, td:last-child, .footer-signature { display: none !important; }
             .print-header { display: block; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
-            .print-signature { display: flex; margin-top: 50px; justify-content: space-between; page-break-inside: avoid; }
-            table { border: 1px solid #ddd; min-width: 100%; }
-            th, td { border: 1px solid #ddd; padding: 8px; color: black !important; }
+            
+            #view-certs { display: none !important; }
+            #view-finances { display: none !important; }
+            body.print-certs #view-certs { display: block !important; }
+            body.print-finances #view-finances { display: block !important; }
+
+            table { border: 1px solid #ddd; min-width: 100%; display: table !important; }
+            tr { display: table-row !important; }
+            th, td { border: 1px solid #ddd; padding: 8px; color: black !important; display: table-cell !important; }
         }
     </style>
 </head>
@@ -285,11 +291,11 @@
     </div>
 
     <div class="pdf-action-section">
-        <strong>📄 Αναφορά Συντηρητή & PDF:</strong>
+        <strong>📄 Αναφορά Συντηρητή & Αποστολή:</strong>
         <div class="pdf-controls">
             <span id="maintainerEmailDisplay" style="font-size: 13px; color: var(--tab-text);">Επιλέξτε συντηρητή για email.</span>
-            <button class="pdf-btn" onclick="exportPDF()">📥 Εκτύπωση PDF</button>
-            <a id="emailLink" href="#" class="email-btn" style="display: none;" target="_blank">✉️ Αποστολή Email</a>
+            <button class="pdf-btn" onclick="exportPDF()">📥 Εκτύπωση / Αποθήκευση PDF</button>
+            <button id="emailBtn" class="email-btn" style="display: none;" onclick="sendEmailReport()">✉️ Δημιουργία Αναφοράς για Email</button>
         </div>
     </div>
 
@@ -330,17 +336,6 @@
         </div>
     </div>
 
-    <div class="print-signature">
-        <div>
-            <p>Ο/Η Διαχειριστής-τρια</p>
-            <br><br><p>_________________________</p>
-        </div>
-        <div>
-            <p>Ο Συντηρητής</p>
-            <br><br><p>_________________________</p>
-        </div>
-    </div>
-
     <div class="footer-signature">
         Designed & Developed by <strong>Psaltou Anna</strong>
     </div>
@@ -355,7 +350,7 @@
     let globalMaintainers = [];
     let currentQuickFilter = 'ALL';
     let isAuthenticated = false;
-    const ADMIN_PIN = "1234"; // Ο κωδικός σου (μπορείς να τον αλλάξεις εδώ)
+    const ADMIN_PIN = "1234";
 
     document.addEventListener("DOMContentLoaded", async () => {
         checkAuthentication();
@@ -369,7 +364,6 @@
             alert("✅ Επιτυχής σύνδεση! Έχετε δικαίωμα διαχείρισης.");
         } else {
             isAuthenticated = false;
-            // Κρύβουμε τα στοιχεία καταχώρισης και επεξεργασίας αν δεν είναι διαχειριστής
             document.getElementById('tab-certificates').style.display = 'none';
             document.querySelectorAll('.tabs-header button')[0].click();
             document.querySelector('.backup-section').style.display = 'none';
@@ -422,7 +416,7 @@
     }
 
     function switchTab(tabName) {
-        if (!isAuthenticated && tabName === 'certificates') return; // Στο read-only η πρώτη καρτέλα φόρμας κρύβεται
+        if (!isAuthenticated && tabName === 'certificates') return;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('tab-certificates').classList.remove('active');
         document.getElementById('tab-finances').classList.remove('active');
@@ -649,7 +643,7 @@
         });
 
         const emailDisplay = document.getElementById("maintainerEmailDisplay");
-        const emailLink = document.getElementById("emailLink");
+        const emailBtn = document.getElementById("emailBtn");
         document.getElementById("printDate").textContent = new Date().toLocaleDateString('el-GR');
 
         if (selectedFilter !== "ALL") {
@@ -658,16 +652,15 @@
             const mEmail = foundM ? (foundM.email || "") : "";
             if (mEmail) {
                 emailDisplay.innerHTML = `Email (${selectedFilter}): <strong>${mEmail}</strong>`;
-                emailLink.href = `mailto:${mEmail}?subject=Αναφορά%20Πιστοποιητικών%20-%20${encodeURIComponent(selectedFilter)}`;
-                emailLink.style.display = "block";
+                emailBtn.style.display = "block";
             } else {
                 emailDisplay.innerHTML = `Ο συντηρητής <strong>${selectedFilter}</strong> δεν έχει email.`;
-                emailLink.style.display = "none";
+                emailBtn.style.display = "none";
             }
         } else {
             document.getElementById("printMaintainerName").textContent = "Όλοι οι Συντηρητές";
             emailDisplay.innerHTML = `Επιλέξτε συντηρητή για αποστολή email.`;
-            emailLink.style.display = "none";
+            emailBtn.style.display = "none";
         }
 
         certTableBody.innerHTML = "";
@@ -731,7 +724,8 @@
             const cost = parseFloat(lift.repairCost) || 0;
             const advance = parseFloat(lift.repairAdvance) || 0;
             const balance = cost - advance;
-            const balanceHtml = balance > 0 ? `<span class="balance-due">${balance}€</span>` : `<span class="balance-zero">0€</span>`;
+            const balanceText = balance > 0 ? balance + "€" : "0€ (Εξοφλημένο)";
+            const balanceClass = balance > 0 ? "balance-due" : "balance-zero";
 
             const actionsTd = isAuthenticated ? `
                 <td>
@@ -748,11 +742,35 @@
                     <td>${lift.expiryDate}</td>
                     <td><strong>${cost}€</strong></td>
                     <td><strong>${advance > 0 ? advance + '€' : '-'}</strong></td>
-                    <td><strong>${balanceHtml}</strong></td>
+                    <td><strong class="${balanceClass}" data-bal="${balance}">${balanceText}</strong></td>
                     ${actionsTd}
                 </tr>
             `;
         });
+    }
+
+    function sendEmailReport() {
+        const selectedFilter = document.getElementById("filterMaintainer").value;
+        const foundM = globalMaintainers.find(m => m.name === selectedFilter);
+        const mEmail = foundM ? (foundM.email || "") : "";
+        if (!mEmail) { alert("Δεν βρέθηκε email συντηρητή!"); return; }
+
+        let reportText = `ΑΝΑΦΟΡΑ ΠΙΣΤΟΠΟΙΗΤΙΚΩΝ & ΟΙΚΟΝΟΜΙΚΩΝ\nΣυντηρητής: ${selectedFilter}\nΗμερομηνία: ${new Date().toLocaleDateString('el-GR')}\n\n`;
+        
+        globalLifts.forEach(l => {
+            if (l.maintainer === selectedFilter) {
+                reportText += `- Οδός: ${l.street} | Κατάσταση: ${l.expiryDate} | Κόστος: ${l.repairCost || 0}€ | Προκαταβολή: ${l.repairAdvance || 0}€\n`;
+            }
+        });
+
+        const blob = new Blob([reportText], { type: "text/plain;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `anafora_${selectedFilter}.txt`;
+        a.click();
+
+        window.location.href = `mailto:${mEmail}?subject=Αναφορά%20Πιστοποιητικών%20-%20${encodeURIComponent(selectedFilter)}&body=Σας%20επισυνάπτω%20την%20αναφορά%20διαχείρισης.`;
     }
 
     async function importData(event) {
@@ -797,7 +815,29 @@
         reader.readAsText(file);
     }
 
-    function exportPDF() { window.print(); }
+    function exportPDF() {
+        const isFinancesActive = document.getElementById('tab-finances').classList.contains('active');
+        
+        const rows = document.querySelectorAll("#financeTableBody tr");
+        rows.forEach(tr => {
+            const cost = parseFloat(tr.cells[3].innerText) || 0;
+            const advText = tr.cells[4].innerText.replace('€', '').trim();
+            const adv = parseFloat(advText) || 0;
+            const bal = cost - adv;
+            const balText = bal > 0 ? bal + "€" : "0€ (Εξοφλημένο)";
+            const color = bal > 0 ? "#ef4444" : "#10b981";
+            tr.cells[5].innerHTML = `<strong style="color: ${color};">${balText}</strong>`;
+        });
+
+        if (isFinancesActive) {
+            document.body.classList.add('print-finances');
+            document.body.classList.remove('print-certs');
+        } else {
+            document.body.classList.add('print-certs');
+            document.body.classList.remove('print-finances');
+        }
+        window.print();
+    }
 
     function exportData() {
         if (!isAuthenticated) return;
