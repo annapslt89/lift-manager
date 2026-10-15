@@ -302,7 +302,7 @@
                         <th>Οδός</th>
                         <th>Συντηρητής</th>
                         <th>Κατάσταση & Σημειώσεις</th>
-                        <th style="width: 100px;">Ενέργειες</th>
+                        <th style="width: 100px;" class="auth-required">Ενέργειες</th>
                     </tr>
                 </thead>
                 <tbody id="certTableBody"></tbody>
@@ -322,7 +322,7 @@
                         <th>Κόστος</th>
                         <th>Προκατ.</th>
                         <th>Υπόλοιπο</th>
-                        <th style="width: 60px;">Ενέργ.</th>
+                        <th style="width: 60px;" class="auth-required">Ενέργ.</th>
                     </tr>
                 </thead>
                 <tbody id="financeTableBody"></tbody>
@@ -354,10 +354,29 @@
     let globalLifts = [];
     let globalMaintainers = [];
     let currentQuickFilter = 'ALL';
+    let isAuthenticated = false;
+    const ADMIN_PIN = "1234"; // Ο κωδικός σου (μπορείς να τον αλλάξεις εδώ)
 
     document.addEventListener("DOMContentLoaded", async () => {
+        checkAuthentication();
         await loadDataFromCloud();
     });
+
+    function checkAuthentication() {
+        const pin = prompt("🔐 Εισάγετε κωδικό πρόσβασης διαχειριστή (ή πατήστε Άκυρο για απλή προβολή):");
+        if (pin === ADMIN_PIN) {
+            isAuthenticated = true;
+            alert("✅ Επιτυχής σύνδεση! Έχετε δικαίωμα διαχείρισης.");
+        } else {
+            isAuthenticated = false;
+            // Κρύβουμε τα στοιχεία καταχώρισης και επεξεργασίας αν δεν είναι διαχειριστής
+            document.getElementById('tab-certificates').style.display = 'none';
+            document.querySelectorAll('.tabs-header button')[0].click();
+            document.querySelector('.backup-section').style.display = 'none';
+            document.querySelectorAll('.auth-required').forEach(el => el.style.display = 'none');
+            alert("👁️ Λειτουργία Μόνο-Ανάγνωσης (Read-Only).");
+        }
+    }
 
     async function loadDataFromCloud() {
         try {
@@ -403,6 +422,7 @@
     }
 
     function switchTab(tabName) {
+        if (!isAuthenticated && tabName === 'certificates') return; // Στο read-only η πρώτη καρτέλα φόρμας κρύβεται
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('tab-certificates').classList.remove('active');
         document.getElementById('tab-finances').classList.remove('active');
@@ -412,7 +432,7 @@
 
         if (tabName === 'certificates') {
             document.querySelectorAll('.tab-btn')[0].classList.add('active');
-            document.getElementById('tab-certificates').classList.add('active');
+            if (isAuthenticated) document.getElementById('tab-certificates').classList.add('active');
             document.getElementById('view-certs').style.display = 'block';
         } else if (tabName === 'finances') {
             document.querySelectorAll('.tab-btn')[1].classList.add('active');
@@ -420,7 +440,7 @@
             document.getElementById('view-finances').style.display = 'block';
         } else if (tabName === 'maintainers') {
             document.querySelectorAll('.tab-btn')[2].classList.add('active');
-            document.getElementById('tab-maintainers').classList.add('active');
+            if(isAuthenticated) document.getElementById('tab-maintainers').classList.add('active');
             document.getElementById('view-certs').style.display = 'block';
         }
     }
@@ -437,6 +457,7 @@
     }
 
     async function saveMaintainer() {
+        if (!isAuthenticated) return;
         const nameInput = document.getElementById("maintainerNameInput").value.trim();
         const emailInput = document.getElementById("maintainerEmailFormInput").value.trim();
         const editId = document.getElementById("editMaintainerId").value;
@@ -462,6 +483,7 @@
     }
 
     function editMaintainer(index) {
+        if (!isAuthenticated) return;
         const m = globalMaintainers[index];
         document.getElementById("maintainerNameInput").value = m.name;
         document.getElementById("maintainerEmailFormInput").value = m.email || "";
@@ -472,6 +494,7 @@
     }
 
     async function deleteMaintainer(index) {
+        if (!isAuthenticated) return;
         const m = globalMaintainers[index];
         const hasLifts = globalLifts.some(l => l.maintainer === m.name);
         if (hasLifts) {
@@ -494,6 +517,7 @@
     }
 
     async function saveLift() {
+        if (!isAuthenticated) return;
         const street = document.getElementById("street").value.trim();
         const maintainer = document.getElementById("maintainerSelect").value;
         const statusType = document.getElementById("statusType").value;
@@ -608,16 +632,18 @@
 
         maintainersTableBody.innerHTML = "";
         globalMaintainers.forEach((m, idx) => {
+            const actionCol = isAuthenticated ? `
+                <td>
+                    <div class="action-btns">
+                        <button class="icon-btn" onclick="switchTab('maintainers'); editMaintainer(${idx})" title="Επεξεργασία">✏️</button>
+                        <button class="icon-btn" onclick="deleteMaintainer(${idx})" title="Διαγραφή">🗑️</button>
+                    </div>
+                </td>` : '';
             maintainersTableBody.innerHTML += `
                 <tr>
                     <td><strong>${m.name}</strong></td>
                     <td>${m.email ? m.email : '<span style="color:#94a3b8;">Χωρίς</span>'}</td>
-                    <td>
-                        <div class="action-btns">
-                            <button class="icon-btn" onclick="switchTab('maintainers'); editMaintainer(${idx})" title="Επεξεργασία">✏️</button>
-                            <button class="icon-btn" onclick="deleteMaintainer(${idx})" title="Διαγραφή">🗑️</button>
-                        </div>
-                    </td>
+                    ${actionCol}
                 </tr>
             `;
         });
@@ -680,17 +706,20 @@
             const displayDateText = (lift.expiryDate === "ΛΗΓΜΕΝΟ" || lift.expiryDate === "ΥΠΟ_ΕΚΔΟΣΗ") ? lift.expiryDate.replace("_", " ") : lift.expiryDate;
             const notesHtml = lift.notes ? `<br><small style="color:var(--tab-text);">💬 ${lift.notes}</small>` : '';
             
+            const actionsTd = isAuthenticated ? `
+                <td>
+                    <div class="action-btns">
+                        <button class="edit-btn" onclick="editLift('${lift.id}')">Επεξ.</button>
+                        <button class="delete-btn" onclick="deleteLift('${lift.id}')">Διαγ.</button>
+                    </div>
+                </td>` : '';
+
             certTableBody.innerHTML += `
                 <tr>
                     <td>${lift.street}</td>
                     <td>${lift.maintainer}</td>
                     <td>${displayDateText} <br><span class="${badgeClass}">${statusText}</span>${notesHtml}</td>
-                    <td>
-                        <div class="action-btns">
-                            <button class="edit-btn" onclick="editLift('${lift.id}')">Επεξ.</button>
-                            <button class="delete-btn" onclick="deleteLift('${lift.id}')">Διαγ.</button>
-                        </div>
-                    </td>
+                    ${actionsTd}
                 </tr>
             `;
         });
@@ -704,6 +733,14 @@
             const balance = cost - advance;
             const balanceHtml = balance > 0 ? `<span class="balance-due">${balance}€</span>` : `<span class="balance-zero">0€</span>`;
 
+            const actionsTd = isAuthenticated ? `
+                <td>
+                    <div class="action-btns">
+                        <button class="icon-btn" onclick="editLift('${lift.id}')" title="Επεξεργασία">✏️</button>
+                        <button class="icon-btn" onclick="deleteLift('${lift.id}')" title="Διαγραφή">🗑️</button>
+                    </div>
+                </td>` : '';
+
             financeTableBody.innerHTML += `
                 <tr>
                     <td>${lift.street}</td>
@@ -712,18 +749,14 @@
                     <td><strong>${cost}€</strong></td>
                     <td><strong>${advance > 0 ? advance + '€' : '-'}</strong></td>
                     <td><strong>${balanceHtml}</strong></td>
-                    <td>
-                        <div class="action-btns">
-                            <button class="icon-btn" onclick="editLift('${lift.id}')" title="Επεξεργασία">✏️</button>
-                            <button class="icon-btn" onclick="deleteLift('${lift.id}')" title="Διαγραφή">🗑️</button>
-                        </div>
-                    </td>
+                    ${actionsTd}
                 </tr>
             `;
         });
     }
 
     async function importData(event) {
+        if (!isAuthenticated) return;
         const file = event.target.files[0];
         if (!file) return;
 
@@ -767,6 +800,7 @@
     function exportPDF() { window.print(); }
 
     function exportData() {
+        if (!isAuthenticated) return;
         const backup = { lifts: globalLifts, maintainers: globalMaintainers };
         const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
         const url = URL.createObjectURL(blob);
@@ -774,6 +808,7 @@
     }
 
     function editLift(id) {
+        if (!isAuthenticated) return;
         switchTab('certificates');
         const lift = globalLifts.find(l => l.id == id);
         if (!lift) return;
@@ -809,6 +844,7 @@
     }
 
     async function deleteLift(id) {
+        if (!isAuthenticated) return;
         if (confirm("Είστε σίγουροι για τη διαγραφή;")) {
             await supabaseClient.from('lifts').delete().eq('id', id);
             globalLifts = globalLifts.filter(l => l.id != id);
