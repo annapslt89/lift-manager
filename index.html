@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Διαχείριση Πιστοποιητικών & Επισκευών Ανελκυστήρων (Supabase Cloud)</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --bg-color: #f8fafc;
+            --container-bg: #ffffff;
+            --text-color: #1e293b;
+            --border-color: #e2e8f0;
+            --header-bg: #f1f5f9;
+            --tab-bg: #e2e8f0;
+            --tab-text: #64748b;
+            --section-bg: #f8fafc;
+            --primary: #3b82f6;
+            --ring-color: rgba(59, 130, 246, 0.25);
+        }
+        [data-theme="dark"] {
+            --bg-color: #0f172a;
+            --container-bg: #1e293b;
+            --text-color: #f8fafc;
+            --border-color: #334155;
+            --header-bg: #111827;
+            --tab-bg: #334155;
+            --tab-text: #94a3b8;
+            --section-bg: #111827;
+            --primary: #60a5fa;
+            --ring-color: rgba(96, 165, 250, 0.3);
+        }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg-color); margin: 0; padding: 25px; color: var(--text-color); transition: background 0.3s, color 0.3s; }
+        .container { max-width: 920px; margin: auto; background: var(--container-bg); padding: 30px; border-radius: 16px; box-shadow: 0 10px 30px -5px rgba(0,0,0,0.08); box-sizing: border-box; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h2 { color: var(--primary); margin: 0; font-weight: 700; }
+        .theme-toggle { background: var(--section-bg); border: 1px solid var(--border-color); padding: 8px 14px; border-radius: 30px; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-color); }
+        .alert-banner { background: #fee2e2; color: #991b1b; padding: 14px 16px; border-radius: 10px; margin-bottom: 24px; font-weight: 600; border-left: 5px solid #ef4444; display: none; }
+        .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .kpi-card { background: var(--section-bg); padding: 18px; border-radius: 12px; text-align: center; border: 1px solid var(--border-color); border-left: 4px solid var(--primary); }
+        .kpi-card.red { border-left-color: #ef4444; }
+        .kpi-card.orange { border-left-color: #f59e0b; }
+        .kpi-card.green { border-left-color: #10b981; }
+        .kpi-number { font-size: 24px; font-weight: 800; margin-top: 6px; }
+        .progress-bar-container { background: var(--border-color); border-radius: 10px; height: 12px; display: flex; overflow: hidden; margin-bottom: 25px; }
+        .progress-segment { height: 100%; transition: width 0.5s; }
+        .seg-ok { background: #10b981; }
+        .seg-pending { background: #f59e0b; }
+        .seg-expired { background: #ef4444; }
+        .quick-filters { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+        .chip { background: var(--section-bg); border: 1px solid var(--border-color); padding: 7px 14px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; }
+        .chip:hover, .chip.active { background: var(--primary); color: white; border-color: var(--primary); }
+        .tabs-header { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 2px solid var(--border-color); padding-bottom: 12px; flex-wrap: wrap; }
+        .tab-btn { flex: 1; min-width: 150px; padding: 12px 16px; background: var(--tab-bg); border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; color: var(--tab-text); text-align: center; }
+        .tab-btn.active { background: var(--primary); color: white; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 6px; font-weight: 600; font-size: 14px; }
+        input, select, textarea { width: 100%; padding: 11px 14px; box-sizing: border-box; border: 1.5px solid var(--border-color); border-radius: 10px; background: var(--section-bg); color: var(--text-color); font-family: inherit; font-size: 14px; }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); background: var(--container-bg); box-shadow: 0 0 0 4px var(--ring-color); }
+        textarea { resize: vertical; height: 80px; }
+        .btn-container { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+        button { background: #10b981; color: white; border: none; padding: 12px 20px; width: 100%; border-radius: 10px; font-size: 15px; font-weight: 700; cursor: pointer; }
+        button:hover { opacity: 0.9; }
+        .cancel-btn { background: #64748b !important; display: none; }
+        .search-section, .filter-section, .backup-section { margin: 15px 0; background: var(--section-bg); padding: 14px; border-radius: 12px; border: 1px solid var(--border-color); }
+        .backup-section { display: flex; gap: 10px; flex-wrap: wrap; }
+        .backup-btn { background: #0d9488; font-size: 14px; padding: 10px; flex: 1; min-width: 130px; }
+        .pdf-action-section { margin: 18px 0; background: var(--section-bg); padding: 16px; border-radius: 12px; border: 1.5px solid #f59e0b; }
+        .pdf-controls { display: flex; gap: 10px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+        .pdf-btn { background: #d97706; color: white; border: none; padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; }
+        .email-btn { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 10px; font-size: 14px; font-weight: 700; text-decoration: none; display: inline-block; text-align: center; }
+        table { width: 100%; margin-top: 15px; border-collapse: separate; border-spacing: 0; }
+        th, td { padding: 14px; border-bottom: 1px solid var(--border-color); text-align: left; }
+        th { background: var(--header-bg); font-weight: 700; font-size: 13px; text-transform: uppercase; color: var(--tab-text); }
+        tbody tr:hover { background: var(--section-bg); }
+        .badge { display: inline-block; padding: 5px 10px; border-radius: 6px; font-size: 12px; font-weight: 700; }
+        .badge.expired { background: #fee2e2; color: #991b1b; }
+        .badge.warning { background: #fef3c7; color: #b45309; }
+        .badge.ok { background: #d1fae5; color: #065f46; }
+        .balance-due { color: #ef4444; font-weight: 800; }
+        .balance-zero { color: #10b981; font-weight: 800; }
+        .action-btns { display: flex; gap: 6px; align-items: center; }
+        .edit-btn { background: var(--primary); color: white; border: none; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .delete-btn { background: #ef4444; color: white; border: none; padding: 7px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; }
+        .icon-btn { background: none; border: none; font-size: 18px; cursor: pointer; padding: 4px; width: auto; }
+        #dateInputDiv { display: none; margin-top: 10px; }
+        .filters-row { display: flex; gap: 12px; flex-wrap: wrap; }
+        .filters-row > div { flex: 1; min-width: 200px; }
+        .footer-signature { text-align: center; margin-top: 40px; font-size: 13px; color: var(--tab-text); border-top: 1px solid var(--border-color); padding-top: 20px; }
+        .print-header, .print-signature { display: none; }
+        @media print {
+            body { background: white; padding: 0; color: black; }
+            .container { box-shadow: none; padding: 0; max-width: 100%; }
+            .top-bar, .alert-banner, .dashboard-grid, .progress-bar-container, .quick-filters, .tabs-header, .form-group, .btn-container, .backup-section, .search-section, .filter-section, .pdf-action-section, .action-btns, th:last-child, td:last-child, .footer-signature { display: none !important; }
+            .print-header { display: block; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+            .print-signature { display: flex; margin-top: 50px; justify-content: space-between; page-break-inside: avoid; }
+            table { border: 1px solid #ddd; }
+            th, td { border: 1px solid #ddd; padding: 8px; color: black !important; }
+        }
+    </style>
+</head>
+<body data-theme="light">
+
+<div class="container">
+    <div class="print-header">
+        <h1 style="margin: 0; color: #2c3e50;">Αναφορά Πιστοποιητικών & Οικονομικών</h1>
+        <p style="margin: 5px 0 0 0; font-size: 14px; color: #555;">Συντηρητής: <strong id="printMaintainerName">-</strong> | Ημερομηνία: <span id="printDate"></span></p>
+    </div>
+
+    <div class="top-bar">
+        <h2>🛗 Διαχείριση Ανελκυστήρων (Supabase Cloud)</h2>
+        <button class="theme-toggle" onclick="toggleTheme()">🌙 Σκοτεινή Λειτουργία</button>
+    </div>
+
+    <div id="alertBanner" class="alert-banner"></div>
+
+    <div class="dashboard-grid">
+        <div class="kpi-card">
+            <div>Συνολικές Πολυκατοικίες</div>
+            <div id="kpiTotal" class="kpi-number">0</div>
+        </div>
+        <div class="kpi-card red">
+            <div>Ληγμένα Πιστοποιητικά</div>
+            <div id="kpiExpired" class="kpi-number">0</div>
+        </div>
+        <div class="kpi-card orange">
+            <div>Υπό Έκδοση</div>
+            <div id="kpiPending" class="kpi-number">0</div>
+        </div>
+        <div class="kpi-card green">
+            <div>Ανεισπρακτό Υπόλοιπο</div>
+            <div id="kpiBalance" class="kpi-number">0€</div>
+        </div>
+    </div>
+
+    <div class="progress-bar-container">
+        <div id="progOk" class="progress-segment seg-ok" style="width: 0%"></div>
+        <div id="progPending" class="progress-segment seg-pending" style="width: 0%"></div>
+        <div id="progExpired" class="progress-segment seg-expired" style="width: 0%"></div>
+    </div>
+
+    <div class="tabs-header">
+        <button class="tab-btn active" onclick="switchTab('certificates')">🛗 1. Πιστοποιητικά</button>
+        <button class="tab-btn" onclick="switchTab('finances')">💰 2. Οικονομικά</button>
+        <button class="tab-btn" onclick="switchTab('maintainers')">👥 3. Συντηρητές</button>
+    </div>
+    
+    <input type="hidden" id="editId" value="">
+    <input type="hidden" id="editMaintainerId" value="">
+
+    <div id="tab-certificates" class="tab-content active">
+        <div class="form-group">
+            <label>Οδός / Διεύθυνση:</label>
+            <input type="text" id="street" placeholder="π.χ. Τσιμισκή 15">
+        </div>
+
+        <div class="form-group">
+            <label>Συντηρητής:</label>
+            <select id="maintainerSelect">
+                <option value="">-- Επιλέξτε Συντηρητή --</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Κατάσταση / Λήξη Πιστοποιητικού:</label>
+            <select id="statusType" onchange="checkStatusType(this.value)">
+                <option value="DATE">📅 Συγκεκριμένη Ημερομηνία Λήξης</option>
+                <option value="PENDING">⏳ Υπό Έκδοση</option>
+                <option value="EXPIRED">❌ Ληγμένο</option>
+            </select>
+            <div id="dateInputDiv">
+                <input type="date" id="expiryDate">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Κόστος Επισκευής (€):</label>
+            <input type="number" id="repairCost" placeholder="π.χ. 350">
+        </div>
+        <div class="form-group">
+            <label>Προκαταβολή (€):</label>
+            <input type="number" id="repairAdvance" placeholder="π.χ. 100">
+        </div>
+
+        <div class="form-group">
+            <label>Σημειώσεις / Ιστορικό Εργασιών:</label>
+            <textarea id="liftNotes" placeholder="π.χ. Απαιτείται αλλαγή συρματόσχοινου..."></textarea>
+        </div>
+        
+        <div class="btn-container">
+            <button id="saveBtn" onclick="saveLift()">Καταχώριση / Αποθήκευση</button>
+            <button id="cancelBtn" class="cancel-btn" onclick="resetForm()">Ακύρωση</button>
+        </div>
+    </div>
+
+    <div id="tab-finances" class="tab-content">
+        <p style="color: var(--tab-text); font-size: 14px; margin-top: 0;">Εδώ εμφανίζονται αυτόματα ταξινομημένες οι πολυκατοικίες με δηλωμένο κόστος.</p>
+    </div>
+
+    <div id="tab-maintainers" class="tab-content">
+        <div class="form-group">
+            <label>Όνομα Συντηρητή:</label>
+            <input type="text" id="maintainerNameInput" placeholder="π.χ. ΓΛΕΡΙΔΗΣ ΙΩΑΝΝΗΣ">
+        </div>
+        <div class="form-group">
+            <label>Email Συντηρητή:</label>
+            <input type="email" id="maintainerEmailFormInput" placeholder="π.χ. info@maintainer.gr">
+        </div>
+        <div class="btn-container">
+            <button id="saveMaintainerBtn" style="background: #8b5cf6;" onclick="saveMaintainer()">Αποθήκευση Συντηρητή</button>
+            <button id="cancelMaintainerBtn" class="cancel-btn" style="display:none;" onclick="resetMaintainerForm()">Ακύρωση</button>
+        </div>
+
+        <h3 style="margin-top: 25px;">Λίστα Συντηρητών</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Όνομα Συντηρητή</th>
+                    <th>Email</th>
+                    <th style="width: 100px;">Ενέργειες</th>
+                </tr>
+            </thead>
+            <tbody id="maintainersTableBody"></tbody>
+        </table>
+    </div>
+
+    <div class="backup-section">
+        <button class="backup-btn" onclick="exportData()">💾 Backup JSON</button>
+        <button class="backup-btn" style="background: #d97706;" onclick="document.getElementById('importFile').click()">📂 Εισαγωγή</button>
+        <button class="backup-btn" style="background: #10b981;" onclick="exportToCSV()">📊 Εξαγωγή Excel (CSV)</button>
+        <input type="file" id="importFile" style="display: none;" accept=".json" onchange="importData(event)">
+    </div>
+
+    <div class="quick-filters">
+        <span class="chip active" onclick="setQuickFilter('ALL', this)">Όλες</span>
+        <span class="chip" onclick="setQuickFilter('EXPIRED', this)">🔴 Ληγμένα</span>
+        <span class="chip" onclick="setQuickFilter('PENDING', this)">⏳ Υπό Έκδοση</span>
+        <span class="chip" onclick="setQuickFilter('DEBT', this)">💰 Με Υπόλοιπο</span>
+    </div>
+
+    <div class="search-section">
+        <label for="searchInput">🔍 Αναζήτηση Οδού / Συντηρητή:</label>
+        <input type="text" id="searchInput" oninput="loadAllDataLocally()" placeholder="Πληκτρολογήστε για αναζήτηση...">
+    </div>
+
+    <div class="filter-section">
+        <div class="filters-row">
+            <div>
+                <label for="filterMaintainer">📌 Φίλτρο ανά Συντηρητή:</label>
+                <select id="filterMaintainer" onchange="loadAllDataLocally()">
+                    <option value="ALL">-- Όλοι οι συντηρητές --</option>
+                </select>
+            </div>
+            <div>
+                <label for="filterStatus">📌 Φίλτρο Κατάστασης:</label>
+                <select id="filterStatus" onchange="loadAllDataLocally()">
+                    <option value="ALL">-- Όλες οι καταστάσεις --</option>
+                    <option value="PENDING">⏳ Υπό Έκδοση</option>
+                    <option value="EXPIRED">❌ Ληγμένα</option>
+                    <option value="OK">✅ Σε ισχύ</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="pdf-action-section">
+        <strong>📄 Αναφορά Συντηρητή & Αποστολή PDF:</strong>
+        <div class="pdf-controls">
+            <span id="maintainerEmailDisplay" style="flex: 2; font-size: 14px;">Επιλέξτε συντηρητή για προβολή email.</span>
+            <button class="pdf-btn" onclick="exportPDF()">📥 Εκτύπωση PDF</button>
+            <a id="emailLink" href="#" class="email-btn" style="display: none;" target="_blank">✉️ Αποστολή Email</a>
+        </div>
+    </div>
+
+    <div id="view-certs" class="view-table-section">
+        <h3>🛗 Λίστα Πιστοποιητικών</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Οδός</th>
+                    <th>Συντηρητής</th>
+                    <th>Κατάσταση / Λήξη & Σημειώσεις</th>
+                    <th style="width: 130px;">Ενέργειες</th>
+                </tr>
+            </thead>
+            <tbody id="certTableBody"></tbody>
+        </table>
+    </div>
+
+    <div id="view-finances" class="view-table-section" style="display: none;">
+        <h3>💰 Οικονομική Παρακολούθηση</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Οδός</th>
+                    <th>Συντηρητής</th>
+                    <th>Κατάσταση</th>
+                    <th>Κόστος</th>
+                    <th>Προκατ.</th>
+                    <th>Υπόλοιπο</th>
+                    <th style="width: 80px;">Ενέργειες</th>
+                </tr>
+            </thead>
+            <tbody id="financeTableBody"></tbody>
+        </table>
+    </div>
+
+    <div class="print-signature">
+        <div>
+            <p>Ο/Η Διαχειριστής-τρια</p>
+            <br><br><p>_________________________</p>
+        </div>
+        <div>
+            <p>Ο Συντηρητής</p>
+            <br><br><p>_________________________</p>
+        </div>
+    </div>
+
+    <div class="footer-signature">
+        Designed & Developed by <strong>Psaltou Anna</strong>
+    </div>
+</div>
+
+<script>
+    const SUPABASE_URL = "https://jsrshtaselhcmnrbhaik.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_AU_iPre9qMK2t53BcxEBCQ_0eGC_2u0"; 
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let globalLifts = [];
+    let globalMaintainers = [];
+    let currentQuickFilter = 'ALL';
+
+    document.addEventListener("DOMContentLoaded", async () => {
+        await loadDataFromCloud();
+    });
+
+    async function loadDataFromCloud() {
+        try {
+            const { data: liftsData } = await supabaseClient.from('lifts').select('*');
+            const { data: maintData } = await supabaseClient.from('maintainers').select('*');
+
+            globalLifts = liftsData || [];
+            
+            // Φιλτράρισμα ώστε να κρατάμε μόνο μοναδικούς συντηρητές με βάση το όνομα (case-insensitive)
+            const rawMaint = maintData || [];
+            const uniqueMap = new Map();
+            rawMaint.forEach(m => {
+                if (m.name) {
+                    const cleanName = m.name.trim().toUpperCase();
+                    if (!uniqueMap.has(cleanName)) {
+                        uniqueMap.set(cleanName, m);
+                    }
+                }
+            });
+            globalMaintainers = Array.from(uniqueMap.values());
+
+            if (globalMaintainers.length === 0) {
+                const defaultM = { name: "ΓΛΕΡΙΔΗΣ ΙΩΑΝΝΗΣ", email: "" };
+                const { data } = await supabaseClient.from('maintainers').insert([defaultM]).select();
+                if (data) globalMaintainers = data;
+            }
+        } catch (err) {
+            console.error("Cloud Error:", err);
+        }
+        checkStatusType('DATE');
+        loadAllDataLocally();
+    }
+
+    function toggleTheme() {
+        const body = document.body;
+        const toggleBtn = document.querySelector('.theme-toggle');
+        if (body.getAttribute("data-theme") === "light") {
+            body.setAttribute("data-theme", "dark");
+            toggleBtn.textContent = "☀️ Φωτεινή Λειτουργία";
+        } else {
+            body.setAttribute("data-theme", "light");
+            toggleBtn.textContent = "🌙 Σκοτεινή Λειτουργία";
+        }
+    }
+
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('tab-certificates').classList.remove('active');
+        document.getElementById('tab-finances').classList.remove('active');
+        document.getElementById('tab-maintainers').classList.remove('active');
+        document.getElementById('view-certs').style.display = 'none';
+        document.getElementById('view-finances').style.display = 'none';
+
+        if (tabName === 'certificates') {
+            document.querySelectorAll('.tab-btn')[0].classList.add('active');
+            document.getElementById('tab-certificates').classList.add('active');
+            document.getElementById('view-certs').style.display = 'block';
+        } else if (tabName === 'finances') {
+            document.querySelectorAll('.tab-btn')[1].classList.add('active');
+            document.getElementById('tab-finances').classList.add('active');
+            document.getElementById('view-finances').style.display = 'block';
+        } else if (tabName === 'maintainers') {
+            document.querySelectorAll('.tab-btn')[2].classList.add('active');
+            document.getElementById('tab-maintainers').classList.add('active');
+            document.getElementById('view-certs').style.display = 'block';
+        }
+    }
+
+    function checkStatusType(val) {
+        document.getElementById("dateInputDiv").style.display = (val === "DATE") ? "block" : "none";
+    }
+
+    function setQuickFilter(filterType, element) {
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        element.classList.add('active');
+        currentQuickFilter = filterType;
+        loadAllDataLocally();
+    }
+
+    async function saveMaintainer() {
+        const nameInput = document.getElementById("maintainerNameInput").value.trim();
+        const emailInput = document.getElementById("maintainerEmailFormInput").value.trim();
+        const editId = document.getElementById("editMaintainerId").value;
+
+        if (!nameInput) {
+            alert("Παρακαλώ συμπληρώστε όνομα συντηρητή!");
+            return;
+        }
+
+        if (!editId) {
+            const { data, error } = await supabaseClient.from('maintainers').insert([{ name: nameInput, email: emailInput }]).select();
+            if (!error && data) globalMaintainers.push(data[0]);
+        } else {
+            const { error } = await supabaseClient.from('maintainers').update({ name: nameInput, email: emailInput }).eq('id', editId);
+            if (!error) {
+                const m = globalMaintainers.find(item => item.id == editId);
+                if (m) { m.name = nameInput; m.email = emailInput; }
+            }
+        }
+
+        resetMaintainerForm();
+        loadAllDataLocally();
+    }
+
+    function editMaintainer(index) {
+        const m = globalMaintainers[index];
+        document.getElementById("maintainerNameInput").value = m.name;
+        document.getElementById("maintainerEmailFormInput").value = m.email || "";
+        document.getElementById("editMaintainerId").value = m.id;
+        document.getElementById("saveMaintainerBtn").textContent = "Αποθήκευση Αλλαγών";
+        document.getElementById("cancelMaintainerBtn").style.display = "inline-block";
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteMaintainer(index) {
+        const m = globalMaintainers[index];
+        const hasLifts = globalLifts.some(l => l.maintainer === m.name);
+        if (hasLifts) {
+            alert(`Δεν μπορείτε να διαγράψετε τον συντηρητή "${m.name}" διότι έχει συνδεδεμένες πολυκατοικίες!`);
+            return;
+        }
+        if (confirm(`Είστε σίγουροι για τη διαγραφή του συντηρητή "${m.name}";`)) {
+            await supabaseClient.from('maintainers').delete().eq('id', m.id);
+            globalMaintainers.splice(index, 1);
+            loadAllDataLocally();
+        }
+    }
+
+    function resetMaintainerForm() {
+        document.getElementById("maintainerNameInput").value = "";
+        document.getElementById("maintainerEmailFormInput").value = "";
+        document.getElementById("editMaintainerId").value = "";
+        document.getElementById("saveMaintainerBtn").textContent = "Αποθήκευση Συντηρητή";
+        document.getElementById("cancelMaintainerBtn").style.display = "none";
+    }
+
+    async function saveLift() {
+        const street = document.getElementById("street").value.trim();
+        const maintainer = document.getElementById("maintainerSelect").value;
+        const statusType = document.getElementById("statusType").value;
+        let expiryDate = "";
+
+        if (statusType === "DATE") {
+            expiryDate = document.getElementById("expiryDate").value;
+            if (!expiryDate) { alert("Παρακαλώ επιλέξτε ημερομηνία λήξης!"); return; }
+        } else if (statusType === "PENDING") {
+            expiryDate = "ΥΠΟ_ΕΚΔΟΣΗ";
+        } else if (statusType === "EXPIRED") {
+            expiryDate = "ΛΗΓΜΕΝΟ";
+        }
+
+        const repairCost = document.getElementById("repairCost").value.trim();
+        const repairAdvance = document.getElementById("repairAdvance").value.trim();
+        const notes = document.getElementById("liftNotes").value.trim();
+        const editId = document.getElementById("editId").value;
+
+        if (!street || !maintainer) {
+            alert("Παρακαλώ συμπληρώστε οδό και επιλέξτε συντηρητή!");
+            return;
+        }
+
+        const liftData = { street, maintainer, expiryDate, repairCost, repairAdvance, notes };
+
+        if (!editId) {
+            const { data, error } = await supabaseClient.from('lifts').insert([liftData]).select();
+            if (!error && data) globalLifts.push(data[0]);
+        } else {
+            const { error } = await supabaseClient.from('lifts').update(liftData).eq('id', editId);
+            if (!error) {
+                const idx = globalLifts.findIndex(l => l.id == editId);
+                if (idx !== -1) globalLifts[idx] = { ...liftData, id: editId };
+            }
+        }
+
+        resetForm();
+        loadAllDataLocally();
+    }
+
+    function loadAllDataLocally() {
+        const certTableBody = document.getElementById("certTableBody");
+        const financeTableBody = document.getElementById("financeTableBody");
+        const maintainersTableBody = document.getElementById("maintainersTableBody");
+        
+        const filterSelect = document.getElementById("filterMaintainer");
+        const filterStatusSelect = document.getElementById("filterStatus");
+        const maintainerSelect = document.getElementById("maintainerSelect");
+        const searchQuery = document.getElementById("searchInput").value.toLowerCase().trim();
+        
+        const selectedFilter = filterSelect.value;
+        const selectedStatusFilter = filterStatusSelect.value;
+        const selectedMaintainerVal = maintainerSelect.value;
+
+        let totalLiftsCount = globalLifts.length;
+        let expiredCount = 0;
+        let pendingCount = 0;
+        let okCount = 0;
+        let totalBalanceSum = 0;
+
+        const today = new Date();
+        globalLifts.forEach(l => {
+            if (l.expiryDate === "ΛΗΓΜΕΝΟ") { expiredCount++; }
+            else if (l.expiryDate === "ΥΠΟ_ΕΚΔΟΣΗ") { pendingCount++; }
+            else {
+                const diffTime = new Date(l.expiryDate) - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays < 0) { expiredCount++; } else { okCount++; }
+            }
+            const c = parseFloat(l.repairCost) || 0;
+            const a = parseFloat(l.repairAdvance) || 0;
+            if (c > 0 && (c - a) > 0) totalBalanceSum += (c - a);
+        });
+
+        document.getElementById("kpiTotal").textContent = totalLiftsCount;
+        document.getElementById("kpiExpired").textContent = expiredCount;
+        document.getElementById("kpiPending").textContent = pendingCount;
+        document.getElementById("kpiBalance").textContent = totalBalanceSum + "€";
+
+        if (totalLiftsCount > 0) {
+            document.getElementById("progOk").style.width = (okCount / totalLiftsCount * 100) + "%";
+            document.getElementById("progPending").style.width = (pendingCount / totalLiftsCount * 100) + "%";
+            document.getElementById("progExpired").style.width = (expiredCount / totalLiftsCount * 100) + "%";
+        }
+
+        const alertBanner = document.getElementById("alertBanner");
+        if (expiredCount > 0 || pendingCount > 0) {
+            alertBanner.style.display = "block";
+            alertBanner.innerHTML = `⚠️ Προσοχή: Υπάρχουν ${expiredCount} ληγμένα πιστοποιητικά και ${pendingCount} υπό έκδοση!`;
+        } else {
+            alertBanner.style.display = "none";
+        }
+
+        maintainerSelect.innerHTML = '<option value="">-- Επιλέξτε Συντηρητή --</option>';
+        globalMaintainers.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m.name;
+            opt.textContent = m.name;
+            if (m.name === selectedMaintainerVal) opt.selected = true;
+            maintainerSelect.appendChild(opt);
+        });
+
+        filterSelect.innerHTML = '<option value="ALL">-- Όλοι οι συντηρητές --</option>';
+        globalMaintainers.forEach(m => {
+            const opt = document.createElement("option");
+            opt.value = m.name;
+            opt.textContent = m.name;
+            if (m.name === selectedFilter) opt.selected = true;
+            filterSelect.appendChild(opt);
+        });
+
+        maintainersTableBody.innerHTML = "";
+        globalMaintainers.forEach((m, idx) => {
+            maintainersTableBody.innerHTML += `
+                <tr>
+                    <td><strong>${m.name}</strong></td>
+                    <td>${m.email ? m.email : '<span style="color:#94a3b8;">Χωρίς email</span>'}</td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="icon-btn" onclick="switchTab('maintainers'); editMaintainer(${idx})" title="Επεξεργασία">✏️</button>
+                            <button class="icon-btn" onclick="deleteMaintainer(${idx})" title="Διαγραφή">🗑️</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        const emailDisplay = document.getElementById("maintainerEmailDisplay");
+        const emailLink = document.getElementById("emailLink");
+        document.getElementById("printDate").textContent = new Date().toLocaleDateString('el-GR');
+
+        if (selectedFilter !== "ALL") {
+            document.getElementById("printMaintainerName").textContent = selectedFilter;
+            const foundM = globalMaintainers.find(m => m.name === selectedFilter);
+            const mEmail = foundM ? (foundM.email || "") : "";
+            if (mEmail) {
+                emailDisplay.innerHTML = `Email Συντηρητή (${selectedFilter}): <strong>${mEmail}</strong>`;
+                emailLink.href = `mailto:${mEmail}?subject=Αναφορά%20Πιστοποιητικών%20-%20${encodeURIComponent(selectedFilter)}`;
+                emailLink.style.display = "inline-block";
+            } else {
+                emailDisplay.innerHTML = `Ο συντηρητής <strong>${selectedFilter}</strong> δεν έχει email.`;
+                emailLink.style.display = "none";
+            }
+        } else {
+            document.getElementById("printMaintainerName").textContent = "Όλοι οι Συντηρητές";
+            emailDisplay.innerHTML = `Επιλέξτε συγκεκριμένο συντηρητή από το φίλτρο για αποστολή email.`;
+            emailLink.style.display = "none";
+        }
+
+        certTableBody.innerHTML = "";
+        financeTableBody.innerHTML = "";
+
+        let financeLifts = [...globalLifts].filter(l => (parseFloat(l.repairCost) || 0) > 0);
+        financeLifts.sort((a, b) => ((parseFloat(b.repairCost) || 0) - (parseFloat(b.repairAdvance) || 0)) - ((parseFloat(a.repairCost) || 0) - (parseFloat(a.repairAdvance) || 0)));
+
+        globalLifts.sort((a, b) => {
+            if (a.expiryDate === "ΛΗΓΜΕΝΟ" || a.expiryDate === "ΥΠΟ_ΕΚΔΟΣΗ") return -1;
+            if (b.expiryDate === "ΛΗΓΜΕΝΟ" || b.expiryDate === "ΥΠΟ_ΕΚΔΟΣΗ") return 1;
+            return new Date(a.expiryDate) - new Date(b.expiryDate);
+        });
+
+        globalLifts.forEach((lift) => {
+            if (filterSelect.value !== "ALL" && lift.maintainer !== filterSelect.value) return; 
+            if (searchQuery !== "" && !lift.street.toLowerCase().includes(searchQuery) && !lift.maintainer.toLowerCase().includes(searchQuery)) return;
+
+            let statusText = "", statusCode = "OK", badgeClass = "badge ok";
+            if (lift.expiryDate === "ΛΗΓΜΕΝΟ") {
+                statusText = "(ΕΛΗΞΕ!)"; statusCode = "EXPIRED"; badgeClass = "badge expired";
+            } else if (lift.expiryDate === "ΥΠΟ_ΕΚΔΟΣΗ") {
+                statusText = "(ΥΠΟ ΕΚΔΟΣΗ)"; statusCode = "PENDING"; badgeClass = "badge warning";
+            } else {
+                const diffDays = Math.ceil((new Date(lift.expiryDate) - today) / (1000 * 60 * 60 * 24));
+                if (diffDays < 0) { statusText = "(ΕΛΗΞΕ!)"; statusCode = "EXPIRED"; badgeClass = "badge expired"; }
+                else if (diffDays <= 30) { statusText = `(Λήγει σε ${diffDays} μέρες)`; statusCode = "EXPIRED"; badgeClass = "badge warning"; }
+                else { statusText = "(Σε ισχύ)"; statusCode = "OK"; badgeClass = "badge ok"; }
+            }
+
+            if (selectedStatusFilter !== "ALL" && statusCode !== selectedStatusFilter) return;
+            if (currentQuickFilter === 'EXPIRED' && statusCode !== 'EXPIRED') return;
+            if (currentQuickFilter === 'PENDING' && statusCode !== 'PENDING') return;
+            if (currentQuickFilter === 'DEBT' && ((parseFloat(lift.repairCost) || 0) - (parseFloat(lift.repairAdvance) || 0)) <= 0) return;
+
+            const displayDateText = (lift.expiryDate === "ΛΗΓΜΕΝΟ" || lift.expiryDate === "ΥΠΟ_ΕΚΔΟΣΗ") ? lift.expiryDate.replace("_", " ") : lift.expiryDate;
+            const notesHtml = lift.notes ? `<br><small style="color:var(--tab-text);">💬 ${lift.notes}</small>` : '';
+            
+            certTableBody.innerHTML += `
+                <tr>
+                    <td>${lift.street}</td>
+                    <td>${lift.maintainer}</td>
+                    <td>${displayDateText} <br><span class="${badgeClass}">${statusText}</span>${notesHtml}</td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="edit-btn" onclick="editLift('${lift.id}')">Επεξεργασία</button>
+                            <button class="delete-btn" onclick="deleteLift('${lift.id}')">Διαγραφή</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+
+        financeLifts.forEach((lift) => {
+            if (filterSelect.value !== "ALL" && lift.maintainer !== filterSelect.value) return; 
+            if (searchQuery !== "" && !lift.street.toLowerCase().includes(searchQuery) && !lift.maintainer.toLowerCase().includes(searchQuery)) return;
+
+            const cost = parseFloat(lift.repairCost) || 0;
+            const advance = parseFloat(lift.repairAdvance) || 0;
+            const balance = cost - advance;
+            const balanceHtml = balance > 0 ? `<span class="balance-due">${balance}€</span>` : `<span class="balance-zero">0€ (Εξοφλημένο)</span>`;
+
+            financeTableBody.innerHTML += `
+                <tr>
+                    <td>${lift.street}</td>
+                    <td>${lift.maintainer}</td>
+                    <td>${lift.expiryDate}</td>
+                    <td><strong>${cost}€</strong></td>
+                    <td><strong>${advance > 0 ? advance + '€' : '-'}</strong></td>
+                    <td><strong>${balanceHtml}</strong></td>
+                    <td>
+                        <div class="action-btns">
+                            <button class="icon-btn" onclick="editLift('${lift.id}')" title="Επεξεργασία">✏️</button>
+                            <button class="icon-btn" onclick="deleteLift('${lift.id}')" title="Διαγραφή">🗑️</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        });
+    }
+
+    async function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                let liftsList = parsed.lifts || parsed;
+                let maintainersList = parsed.maintainers || [];
+
+                if (maintainersList.length === 0) {
+                    let uniqueM = [...new Set(liftsList.map(l => l.maintainer))];
+                    maintainersList = uniqueM.map(m => ({ name: m, email: "" }));
+                }
+
+                for (let m of maintainersList) {
+                    await supabaseClient.from('maintainers').insert([{ name: m.name, email: m.email || "" }]);
+                }
+
+                for (let l of liftsList) {
+                    delete l.id;
+                    await supabaseClient.from('lifts').insert([{
+                        street: l.street || "",
+                        maintainer: l.maintainer || "",
+                        expiryDate: l.expiryDate || "",
+                        repairCost: l.repairCost || "",
+                        repairAdvance: l.repairAdvance || "",
+                        notes: l.notes || ""
+                    }]);
+                }
+
+                await loadDataFromCloud();
+                alert("Τα δεδομένα μεταφέρθηκαν με επιτυχία στο Supabase Cloud!");
+            } catch (err) {
+                alert("Σφάλμα κατά την ανάγνωση του αρχείου!");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function exportToCSV() {
+        if (globalLifts.length === 0) { alert("Δεν υπάρχουν δεδομένα!"); return; }
+        let csv = "\uFEFFΟδός,Συντηρητής,Λήξη/Κατάσταση,Κόστος,Προκαταβολή,Σημειώσεις\n";
+        globalLifts.forEach(l => { csv += `"${l.street}","${l.maintainer}","${l.expiryDate}","${l.repairCost || 0}","${l.repairAdvance || 0}","${l.notes || ''}"\n`; });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = "lifts_export.csv"; a.click();
+    }
+
+    function exportPDF() { window.print(); }
+
+    function exportData() {
+        const backup = { lifts: globalLifts, maintainers: globalMaintainers };
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a"); a.href = url; a.download = "lifts_backup.json"; a.click();
+    }
+
+    function editLift(id) {
+        switchTab('certificates');
+        const lift = globalLifts.find(l => l.id == id);
+        if (!lift) return;
+        document.getElementById("street").value = lift.street;
+        document.getElementById("maintainerSelect").value = lift.maintainer;
+        const statusTypeSelect = document.getElementById("statusType");
+        if (lift.expiryDate === "ΛΗΓΜΕΝΟ") { statusTypeSelect.value = "EXPIRED"; checkStatusType("EXPIRED"); }
+        else if (lift.expiryDate === "ΥΠΟ_ΕΚΔΟΣΗ") { statusTypeSelect.value = "PENDING"; checkStatusType("PENDING"); }
+        else { statusTypeSelect.value = "DATE"; checkStatusType("DATE"); document.getElementById("expiryDate").value = lift.expiryDate; }
+        document.getElementById("repairCost").value = lift.repairCost || "";
+        document.getElementById("repairAdvance").value = lift.repairAdvance || "";
+        document.getElementById("liftNotes").value = lift.notes || "";
+        document.getElementById("editId").value = lift.id;
+        document.getElementById("saveBtn").textContent = "Αποθήκευση Αλλαγών";
+        document.getElementById("saveBtn").style.background = "#3b82f6";
+        document.getElementById("cancelBtn").style.display = "block";
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function resetForm() {
+        document.getElementById("street").value = "";
+        document.getElementById("maintainerSelect").value = "";
+        document.getElementById("statusType").value = "DATE";
+        checkStatusType("DATE");
+        document.getElementById("expiryDate").value = "";
+        document.getElementById("repairCost").value = "";
+        document.getElementById("repairAdvance").value = "";
+        document.getElementById("liftNotes").value = "";
+        document.getElementById("editId").value = "";
+        document.getElementById("saveBtn").textContent = "Καταχώριση / Αποθήκευση";
+        document.getElementById("saveBtn").style.background = "#10b981";
+        document.getElementById("cancelBtn").style.display = "none";
+    }
+
+    async function deleteLift(id) {
+        if (confirm("Είστε σίγουροι για τη διαγραφή;")) {
+            await supabaseClient.from('lifts').delete().eq('id', id);
+            globalLifts = globalLifts.filter(l => l.id != id);
+            loadAllDataLocally();
+        }
+    }
+</script>
+
+</body>
+</html>
