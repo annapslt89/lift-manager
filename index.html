@@ -377,7 +377,17 @@
             const { data: liftsData } = await supabaseClient.from('lifts').select('*');
             const { data: maintData } = await supabaseClient.from('maintainers').select('*');
 
-            globalLifts = liftsData || [];
+            // --- ΑΥΤΟΜΑΤΟ ΦΙΛΤΡΟ ΜΟΝΑΔΙΚΟΤΗΤΑΣ ΟΔΩΝ (Αποφυγή Διπλοτυπίας) ---
+            const rawLifts = liftsData || [];
+            const uniqueLiftsMap = new Map();
+            rawLifts.forEach(l => {
+                if (l.street) {
+                    const cleanStreet = l.street.trim().toUpperCase();
+                    // Αν υπάρχει ήδη, κρατάμε την πιο πρόσφατη ή τη μοναδική
+                    uniqueLiftsMap.set(cleanStreet, l);
+                }
+            });
+            globalLifts = Array.from(uniqueLiftsMap.values());
             
             const rawMaint = maintData || [];
             const uniqueMap = new Map();
